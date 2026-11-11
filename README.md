@@ -74,6 +74,40 @@ If a `borders` process is already running, invoking a new `borders` instance
 with any combination of the available options will update the properties of
 the already running instance.
 
+### Mission Control (local native patch)
+
+```bash
+borders mission_control=on mission_control_fade=80
+```
+
+`mission_control` defaults to `off`. When enabled, borders on the display opening
+Mission Control fade out; shield windows extend this scope to other displays
+participating in Mission Control. Borders on unrelated displays are untouched.
+`mission_control_fade` accepts 0–500 milliseconds (default 80); 0 hides instantly.
+The fade is **time-based, not proportional to trackpad gesture progress**.
+
+This patch uses AX expose notifications for early entry where available, with
+WindowManager/Dock window notifications as a fallback. AX notifications need
+Accessibility permission for the custom executable; normal SkyLight focus
+tracking can still be used with `ax_focus=off`. Mission Control detection relies
+on private macOS behavior and should be retested after OS upgrades.
+
+Only opacity is animated. No process restart, injected library, or unconditional
+all-window redraw occurs on entry/exit. Deferred changes are reconciled on exit;
+window-ID checks run only during a bounded exit confirmation, never at idle.
+
+Build and test this local checkout:
+
+```bash
+make test
+make install-local
+```
+
+The latter installs `~/.local/libexec/jankyborders/borders` without modifying
+Homebrew's executable. The dotfiles yabai supervisor uses this build when present.
+Use that path when updating these new settings on a running instance; the
+unpatched Homebrew client does not recognize them. Rebuild after editing source.
+
 ## Documentation
 Local documentation is available as `man borders` and as a rendered version in
 the [Wiki](https://github.com/FelixKratz/JankyBorders/wiki/Man-Page).

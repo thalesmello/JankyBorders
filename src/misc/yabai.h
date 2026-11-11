@@ -82,7 +82,6 @@ static void* yabai_proxy_begin_proc(void* context) {
                                  - proxy->target_bounds.size.height);
 
   animation_stop(&proxy->animation);
-  animation_start(&proxy->animation, track_transform, payload);
 
   if (!proxy->is_proxy) {
     proxy->is_proxy = true;
@@ -97,12 +96,21 @@ static void* yabai_proxy_begin_proc(void* context) {
                               info->settings.border_order,
                               info->external_proxy_wid    );
 
+    // Position the proxy before its first visible frame, not on the next
+    // display-link callback.
+    CGAffineTransform target_transform;
+    if (SLSGetWindowTransform(proxy->cid, info->external_proxy_wid, &target_transform) == kCGErrorSuccess) {
+      CGAffineTransform transform = CGAffineTransformConcat(target_transform, payload->initial_transform);
+      SLSTransactionSetWindowTransform(transaction, proxy->wid, 0, 0, transform);
+    }
     SLSTransactionSetWindowAlpha(transaction, info->border_wid, 0.f);
-    SLSTransactionSetWindowAlpha(transaction, proxy->wid, 1.f);
+    SLSTransactionSetWindowAlpha(transaction, proxy->wid, proxy->mission_control_opacity);
     SLSTransactionCommit(transaction, 0);
     CFRelease(transaction);
   }
 
+  // Do not let tracking overwrite (or be overwritten by) the initial reveal.
+  animation_start(&proxy->animation, track_transform, payload);
   pthread_mutex_unlock(&proxy->mutex);
   free(context);
   return NULL;
@@ -139,6 +147,7 @@ static inline void yabai_proxy_begin(struct table* windows, uint32_t wid, uint32
       border->proxy->sid = border->sid;
       border->proxy->radius = border->radius;
       border->proxy->inner_radius = border->inner_radius;
+      border->proxy->mission_control_opacity = border->mission_control_opacity;
     }
 
     struct yabai_proxy_payload* payload
@@ -168,7 +177,7 @@ static inline void yabai_proxy_end(struct table* windows, uint32_t wid, uint32_t
     CFTypeRef transaction = SLSTransactionCreate(border->cid);
     if (transaction) {
       SLSTransactionSetWindowAlpha(transaction, proxy->wid, 0.f);
-      SLSTransactionSetWindowAlpha(transaction, border->wid, 1.f);
+      SLSTransactionSetWindowAlpha(transaction, border->wid, border->mission_control_opacity);
       SLSTransactionCommit(transaction, 0);
       CFRelease(transaction);
     }

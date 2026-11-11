@@ -2,10 +2,12 @@
 #include "hashtable.h"
 #include "misc/extern.h"
 #include "windows.h"
+#include "mission_control.h"
 #include <pthread.h>
 #include <time.h>
 
 extern struct settings g_settings;
+static bool border_has_visible_content(struct border*, struct settings*);
 
 struct settings* border_get_settings(struct border* border) {
   assert(pthread_main_np() != 0);
@@ -156,6 +158,7 @@ static void border_draw(struct border* border, CGRect frame, struct settings* se
   CGContextRestoreGState(border->context);
   SLSFlushWindowContentRegion(border->cid, border->wid, NULL);
   SLSWindowThaw(border->cid, border->wid);
+  border->content_visible = border_has_visible_content(border, settings);
 }
 
 void border_create_window(struct border* border, CGRect frame, bool unmanaged, bool hidpi) {
@@ -175,6 +178,11 @@ void border_create_window(struct border* border, CGRect frame, bool unmanaged, b
 
 void border_update_internal(struct border* border, struct settings* settings) {
   if (border->external_proxy_wid) return;
+  if (!border->is_proxy && mission_control_active()
+      && mission_control_border_affected(border) && border->wid) {
+    border->mission_control_dirty = true;
+    return;
+  }
 
   int cid = border->cid;
   CGRect frame;
@@ -219,9 +227,15 @@ void border_update_internal(struct border* border, struct settings* settings) {
   }
 
   if (border->needs_redraw) border_draw(border, frame, settings);
+  border->mission_control_opacity = mission_control_opacity_for_border(border);
 
   CFTypeRef transaction = SLSTransactionCreate(cid);
-  if(!transaction) return;
+  if (!transaction) {
+    if (disabled_update) SLSReenableUpdate(cid);
+    return;
+  }
+  if (!border->is_proxy)
+    SLSTransactionSetWindowAlpha(transaction, border->wid, border->mission_control_opacity);
   SLSTransactionMoveWindowWithGroup(transaction, border->wid, border->origin);
 
   if (!border->is_proxy) {
@@ -272,6 +286,7 @@ static void* border_update_async_proc(void* context) {
 
 void border_init(struct border* border, int cid) {
   memset(border, 0, sizeof(struct border));
+  border->mission_control_opacity = 1.f;
   pthread_mutexattr_t mattr;
   pthread_mutexattr_init(&mattr);
   pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
@@ -305,6 +320,11 @@ void border_destroy(struct border* border) {
 
 void border_move(struct border* border) {
   pthread_mutex_lock(&border->mutex);
+  if (mission_control_active() && mission_control_border_affected(border)) {
+    border->mission_control_dirty = true;
+    pthread_mutex_unlock(&border->mutex);
+    return;
+  }
   if (border->external_proxy_wid) {
     pthread_mutex_unlock(&border->mutex);
     return;
@@ -378,6 +398,41 @@ void border_hide(struct border* border) {
   pthread_mutex_unlock(&border->mutex);
 }
 
+static bool border_has_visible_content(struct border* border, struct settings* settings) {
+  struct color_style color = border->focused ? settings->active_window : settings->inactive_window;
+  if (settings->show_background) return true;
+  if (color.stype == COLOR_STYLE_GRADIENT)
+    return ((color.gradient.color1 | color.gradient.color2) & 0xff000000U) != 0;
+  return (color.color & 0xff000000U) != 0;
+}
+
+void border_set_mission_control_opacity(struct border* border, float opacity) {
+  pthread_mutex_lock(&border->mutex);
+  if (border->mission_control_opacity != opacity) {
+    border->mission_control_opacity = opacity;
+    // Use the rendered buffer, not pending settings: a deferred transparent
+    // redraw must not leave an old opaque buffer visible during Mission Control.
+    if (border->wid && (border->content_visible || border->needs_redraw)) {
+#ifdef MC_TRACE
+      fprintf(stderr, "mc alpha wid=%u target=%u value=%.3f focused=%d\n", border->wid, border->target_wid, opacity, border->focused);
+#endif
+      CFTypeRef transaction = SLSTransactionCreate(border->cid);
+      if (transaction) {
+        SLSTransactionSetWindowAlpha(transaction, border->wid,
+                                     border->external_proxy_wid ? 0.f : opacity);
+        if (border->proxy) {
+          border->proxy->mission_control_opacity = opacity;
+          SLSTransactionSetWindowAlpha(transaction, border->proxy->wid,
+                                       border->external_proxy_wid ? opacity : 0.f);
+        }
+        SLSTransactionCommit(transaction, 0);
+        CFRelease(transaction);
+      }
+    }
+  }
+  pthread_mutex_unlock(&border->mutex);
+}
+
 void border_unhide(struct border* border) {
   pthread_mutex_lock(&border->mutex);
   if (border->too_small
@@ -391,6 +446,8 @@ void border_unhide(struct border* border) {
     struct settings* settings = border_get_settings(border);
     CFTypeRef transaction = SLSTransactionCreate(border->cid);
     if (transaction) {
+      border->mission_control_opacity = mission_control_opacity_for_border(border);
+      SLSTransactionSetWindowAlpha(transaction, border->wid, border->mission_control_opacity);
       SLSTransactionOrderWindow(transaction,
                                 border->wid,
                                 settings->border_order,

@@ -3,6 +3,7 @@
 #include "windows.h"
 #include "border.h"
 #include "misc/window.h"
+#include "mission_control.h"
 
 extern struct table g_windows;
 extern pid_t g_pid;
@@ -40,7 +41,8 @@ static void window_spawn_handler(uint32_t event, struct window_spawn_data* data,
   uint32_t wid = data->wid;
   uint64_t sid = data->sid;
 
-  if (!wid || !sid || is_own_window(cid, wid)) return;
+  if (!wid || is_own_window(cid, wid)) return;
+  if (mission_control_window_event(event, wid) || !sid) return;
 
   if (event == EVENT_WINDOW_CREATE) {
     if (windows_window_create(windows, wid, sid)) {
@@ -59,7 +61,7 @@ static void window_modify_handler(uint32_t event, uint32_t* window_id, size_t _,
   uint32_t wid = *window_id;
   struct table* windows = &g_windows;
 
-  if (is_own_window(cid, wid)) return;
+  if (mission_control_window_event(event, wid) || is_own_window(cid, wid)) return;
 
   if (event == EVENT_WINDOW_MOVE) {
     debug("Window Move: %d\n", wid);

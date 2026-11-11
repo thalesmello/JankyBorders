@@ -1,6 +1,7 @@
 #include "windows.h"
 #include "hashtable.h"
 #include "border.h"
+#include "mission_control.h"
 #include "misc/ax.h"
 #include <string.h>
 #include <libproc.h>
@@ -219,31 +220,20 @@ bool windows_window_destroy(struct table* windows, uint32_t wid, uint32_t sid) {
 }
 
 void windows_update_notifications(struct table* windows) {
-  int window_count = 0;
-  uint32_t window_list[1024] = {};
-
-  for (int i = 0; i < windows->capacity; ++i) {
-    struct bucket *bucket = windows->buckets[i];
-    while (bucket) {
-      if (bucket->value) {
-        uint32_t wid = *(uint32_t *) bucket->key;
-        window_list[window_count++] = wid;
-      }
-      bucket = bucket->next;
-    }
-  }
-
-  int cid = SLSMainConnectionID();
-  SLSRequestNotificationsForWindows(cid, window_list, window_count);
+  mission_control_request_notifications(windows);
 }
 
 void windows_determine_and_focus_active_window(struct table* windows) {
+  if (mission_control_active()) return;
   int cid = SLSMainConnectionID();
   uint32_t front_wid = g_settings.ax_focus
                        ? ax_get_front_window(cid)
                        : get_front_window(cid);
 
   debug("Front window: %d\n", front_wid);
+#ifdef MC_TRACE
+  fprintf(stderr, "mc focus wid=%u ax=%d trusted=%d\n", front_wid, g_settings.ax_focus, AXIsProcessTrusted());
+#endif
   if (!windows_window_focus(windows, front_wid)) {
     debug("Taking slow window focus path: %d\n", front_wid);
     if (front_wid && windows_window_create(windows,
@@ -255,6 +245,10 @@ void windows_determine_and_focus_active_window(struct table* windows) {
 }
 
 void windows_draw_borders_on_current_spaces(struct table* windows) {
+  if (mission_control_active()) {
+    mission_control_defer_space_update();
+    return;
+  }
   debug("Space Change: Consistency check\n");
   int cid = SLSMainConnectionID();
   CFArrayRef displays = SLSCopyManagedDisplays(cid);

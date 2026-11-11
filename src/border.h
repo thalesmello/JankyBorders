@@ -44,6 +44,8 @@ struct settings {
   bool show_background;
   int border_order;
   bool ax_focus;
+  bool mission_control;
+  float mission_control_fade; // milliseconds; zero disables animation
 
   bool blacklist_enabled;
   struct table blacklist;
@@ -66,6 +68,9 @@ struct border {
   bool needs_redraw;
   bool too_small;
   bool sticky;
+  bool mission_control_dirty;
+  bool content_visible;
+  float mission_control_opacity;
 
   uint64_t sid;
   uint32_t wid;
@@ -97,5 +102,6 @@ void border_move(struct border* border);
 void border_update(struct border* border, bool try_async);
 void border_hide(struct border* border);
 void border_unhide(struct border* border);
+void border_set_mission_control_opacity(struct border* border, float opacity);
 
 struct settings* border_get_settings(struct border* border);

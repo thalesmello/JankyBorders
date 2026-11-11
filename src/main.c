@@ -5,6 +5,7 @@
 #include "windows.h"
 #include "mach.h"
 #include "parse.h"
+#include "mission_control.h"
 #include "misc/connection.h"
 #include "misc/ax.h"
 #include "misc/yabai.h"
@@ -42,6 +43,8 @@ struct settings g_settings = { .enabled = true,
                                .show_background = false,
                                .border_order = BORDER_ORDER_BELOW,
                                .ax_focus = false,
+                               .mission_control = false,
+                               .mission_control_fade = 80.f,
                                .blacklist_enabled = false,
                                .whitelist_enabled = false                    };
 
@@ -88,6 +91,7 @@ static void message_handler(void* data, uint32_t len) {
     return;
   } else {
     g_settings = settings;
+    mission_control_settings_changed();
     for (int i = 0; i < g_windows.capacity; ++i) {
       struct bucket* bucket = g_windows.buckets[i];
       while (bucket) {
@@ -224,7 +228,9 @@ int main(int argc, char** argv) {
     CFRelease(source);
   }
 
+  mission_control_init();
   windows_add_existing_windows(&g_windows);
+  windows_determine_and_focus_active_window(&g_windows);
 
   mach_server_begin(&g_mach_server, message_handler);
   if (!update_mask) execute_config_file("borders", "bordersrc");

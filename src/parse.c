@@ -1,6 +1,7 @@
 #include "parse.h"
 #include "border.h"
 #include "hashtable.h"
+#include <math.h>
 
 static bool str_starts_with(char* string, char* prefix) {
   if (!string || !prefix) return false;
@@ -125,6 +126,23 @@ uint32_t parse_settings(struct settings* settings, int count, char** arguments) 
     else if (strcmp(arguments[i], "ax_focus=off") == 0) {
       settings->ax_focus = false;
       update_mask |= BORDER_UPDATE_MASK_SETTING;
+    }
+    else if (strcmp(arguments[i], "mission_control=on") == 0) {
+      settings->mission_control = true;
+      update_mask |= BORDER_UPDATE_MASK_SETTING;
+    }
+    else if (strcmp(arguments[i], "mission_control=off") == 0) {
+      settings->mission_control = false;
+      update_mask |= BORDER_UPDATE_MASK_SETTING;
+    }
+    else if (str_starts_with(arguments[i], "mission_control_fade=")) {
+      float duration;
+      char trailing;
+      if (sscanf(arguments[i], "mission_control_fade=%f%c", &duration, &trailing) == 1
+          && isfinite(duration) && duration >= 0.f && duration <= 500.f) {
+        settings->mission_control_fade = duration;
+        update_mask |= BORDER_UPDATE_MASK_SETTING;
+      } else printf("[?] Borders: mission_control_fade must be 0..500 milliseconds\n");
     }
     else if (sscanf(arguments[i], "apply-to=%d", &settings->apply_to) == 1) {
       update_mask |= BORDER_UPDATE_MASK_SETTING;

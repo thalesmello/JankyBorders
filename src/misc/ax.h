@@ -30,6 +30,8 @@ static inline uint32_t ax_get_front_window(int cid) {
   SLSConnectionGetPID(target_cid, &pid);
 
   AXUIElementRef app = AXUIElementCreateApplication(pid);
+  // Do not let a hung application's AX server stall border transitions.
+  AXUIElementSetMessagingTimeout(app, 0.05f);
   CFTypeRef window = NULL;
   AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, &window);
   CFRelease(app);
