@@ -74,11 +74,21 @@ If a `borders` process is already running, invoking a new `borders` instance
 with any combination of the available options will update the properties of
 the already running instance.
 
-### Mission Control (local native patch)
+### Mission Control (native fork)
+
+Install the patched Homebrew formula from this repository:
 
 ```bash
+brew tap thalesmello/jankyborders https://github.com/thalesmello/JankyBorders.git
+# Only when replacing an installed upstream version:
+brew unlink felixkratz/formulae/borders
+brew install thalesmello/jankyborders/borders-mission-control
 borders mission_control=on mission_control_fade=80
 ```
+
+The formula is pinned to the reviewed native patch commit, not a moving branch.
+It installs the `borders` command; the formula's distinct name avoids confusing
+it with upstream `felixkratz/formulae/borders`.
 
 `mission_control` defaults to `off`. When enabled, borders on the display opening
 Mission Control fade out; shield windows extend this scope to other displays
@@ -104,9 +114,10 @@ make install-local
 ```
 
 The latter installs `~/.local/libexec/jankyborders/borders` without modifying
-Homebrew's executable. The dotfiles yabai supervisor uses this build when present.
-Use that path when updating these new settings on a running instance; the
-unpatched Homebrew client does not recognize them. Rebuild after editing source.
+Homebrew's executable. The dotfiles yabai supervisor prefers the patched Homebrew
+formula, then this manual build when present. Use the patched executable when
+updating these new settings on a running instance; the unpatched upstream
+Homebrew client does not recognize them. Rebuild after editing source.
 
 ## Documentation
 Local documentation is available as `man borders` and as a rendered version in
